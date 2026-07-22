@@ -1,4 +1,4 @@
-# Transcribix
+# Transcribix <img src=https://github.com/C0m3b4ck/Transcribix/blob/main/icon.png>
 
 A program leveraging local AI models for captioning videos.
 
