@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.srt
+*.ass
+*.vtt
+output_*.mp4
+.env
+*.egg
+.mypy_cache/
+.pytest_cache/

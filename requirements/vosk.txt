@@ -1,0 +1,4 @@
+vosk
+soundfile
+numpy
+librosa

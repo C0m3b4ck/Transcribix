@@ -1,0 +1,4 @@
+nemo-toolkit[asr]
+torch
+torchaudio
+whisperx
