@@ -13,7 +13,7 @@ All models run 100% locally. No API keys, no tokens, no internet at runtime.
 - Word-level timestamps for caption generation
 - SRT, VTT, and **ASS subtitles with custom styling** (font, color, size, position, outline, shadow)
 - **Configurable words per caption chunk** (1-8 words)
-- **Burn subtitles directly onto video** with ffmpeg
+- **Optional subtitle burning into video** with ffmpeg (skip if you just need files)
 - **Colorful CLI** with verbose output, system info, and position preview
 - **Gradio Web UI** for browser-based use
 - Interactive file selection (CLI lists media files or accepts manual path)
@@ -31,7 +31,7 @@ All models run 100% locally. No API keys, no tokens, no internet at runtime.
 | GPU | Any CUDA-capable | NVIDIA RTX 3060+ |
 | Disk | 2 GB | 10 GB+ (models vary) |
 | OS | Linux, macOS, Windows | Linux (best CUDA support) |
-| ffmpeg | Required for video burning | Latest version |
+| ffmpeg | Required for video burning (optional) | Latest version |
 
 **Note:** CPU-only mode works but is 5-10x slower than GPU. Use Python 3.11 for best compatibility with PyTorch. All models auto-detect GPU/CPU availability.
 
@@ -66,7 +66,8 @@ The CLI will:
 2. Scan for media files and let you select one (or type a path)
 3. Prompt for subtitle styling with a visual position preview
 4. Show model details and real-time transcription progress
-5. Generate SRT + ASS subtitle files and burn them onto video
+5. Generate SRT + ASS subtitle files
+6. Ask if you want to burn subtitles into video (optional, requires ffmpeg)
 
 ### Gradio Web UI
 
@@ -81,8 +82,8 @@ The web UI provides:
 - File upload or file path input
 - Model selection with live info display
 - Full subtitle styling controls (font, color, size, position, outline, shadow)
-- One-click transcription and subtitle burning
-- Downloadable SRT/ASS files and burned video
+- Optional checkbox to burn subtitles into video (requires ffmpeg)
+- One-click transcription with downloadable SRT/ASS files and burned video
 
 To expose on your local network (e.g. for access from other devices):
 ```bash

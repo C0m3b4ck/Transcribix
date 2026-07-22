@@ -1233,16 +1233,23 @@ if __name__ == "__main__":
     ass_path = "captions_faster_whisper.ass"
     words_to_ass(words, ass_path, subtitle_prefs, words_per_chunk)
 
-    # Burn subtitles onto video
-    output_video = "output_faster_whisper.mp4"
-    burn_subtitles_to_video(AUDIO_FILE, ass_path, output_video, subtitle_prefs)
+    # Ask if user wants to burn subtitles onto video
+    print(f"\n{Style.BOLD}Burn subtitles into video?{Style.RESET}")
+    burn_choice = input(f"{Style.BRIGHT_YELLOW}Burn subtitles onto video? (y/n, default n): {Style.RESET}").strip().lower()
 
-    # Print summary
     output_files = {
         "SRT": srt_path,
         "ASS": ass_path,
-        "Video": output_video,
     }
+
+    if burn_choice in ("y", "yes"):
+        output_video = "output_faster_whisper.mp4"
+        burn_subtitles_to_video(AUDIO_FILE, ass_path, output_video, subtitle_prefs)
+        output_files["Video"] = output_video
+    else:
+        print_info("Skipping video burn — subtitle files generated only.")
+
+    # Print summary
     print_transcription_summary(words, elapsed, output_files)
 
     # Uncomment any model you want to test:
