@@ -1,4 +1,4 @@
-nemo-toolkit[asr]
-torch
-torchaudio
-whisperx
+nemo-toolkit[asr]==1.23.0
+torch==2.3.1
+torchaudio==2.3.1
+whisperx==3.1.3

@@ -1,1 +1,1 @@
-stable-ts
+stable-ts==2.16.3
