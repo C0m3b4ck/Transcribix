@@ -1,6 +1,6 @@
 # Transcribix
 
-Local AI Models for YouTube Captioning — Full Comparison (11 models)
+A program leveraging local AI models for captioning videos.
 
 All models run 100% locally. No API keys, no tokens, no internet at runtime.
 
