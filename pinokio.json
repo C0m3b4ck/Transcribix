@@ -1,5 +1,8 @@
 {
   "title": "Transcribix",
   "description": "Offline speech-to-text transcription with 11 local AI models",
-  "icon": "icon.png"
+  "icon": "icon.png",
+  "author": "C0m3b4ck",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/C0m3b4ck/Transcribix"
 }
