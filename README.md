@@ -42,6 +42,9 @@ All models run 100% locally. No API keys, no tokens, no internet at runtime.
 git clone https://github.com/C0m3b4ck/Transcribix.git
 cd Transcribix
 
+# Install libcublas12 (required for CUDA/PyTorch)
+sudo apt install -y libcublas12
+
 # Create virtual environment
 python3 -m venv venv
 source venv/bin/activate
