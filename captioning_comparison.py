@@ -21,7 +21,45 @@ Models compared:
 import json
 import sys
 import os
+import threading
 from pathlib import Path
+
+
+# =============================================================================
+# MODEL CACHE
+# =============================================================================
+# Multi-GB models are loaded once per (model identifier, device) combo and
+# reused across transcribe_* calls instead of being reloaded on every call.
+
+_MODEL_CACHE = {}
+_MODEL_CACHE_LOCK = threading.Lock()
+
+
+def _get_cached_model(cache_key, loader):
+    """Return a cached model object, loading it once per cache key (thread-safe)."""
+    with _MODEL_CACHE_LOCK:
+        if cache_key not in _MODEL_CACHE:
+            _MODEL_CACHE[cache_key] = loader()
+    return _MODEL_CACHE[cache_key]
+
+
+def _load_faster_whisper_model(model_size, device, compute_type):
+    """Load and cache a faster-whisper WhisperModel, keyed by size/device/type."""
+    from faster_whisper import WhisperModel
+    return _get_cached_model(
+        ("faster-whisper", model_size, device, compute_type),
+        lambda: WhisperModel(model_size, device=device, compute_type=compute_type),
+    )
+
+
+def escape_ffmpeg_filter_path(path: str) -> str:
+    """
+    Escape a file path for use inside an ffmpeg filter argument (e.g. subtitles=).
+
+    ffmpeg filter grammar requires backslashes, colons and quotes to be escaped
+    (unlike shell quoting). Windows drive letters like 'C:' become 'C\\:'.
+    """
+    return path.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
 
 
 # =============================================================================
@@ -622,7 +660,6 @@ def burn_subtitles_to_video(
     Uses the subtitles filter for hardcoded subtitles.
     """
     import subprocess
-    import shlex
 
     # Validate paths exist before passing to ffmpeg
     if not os.path.isfile(video_path):
@@ -632,13 +669,11 @@ def burn_subtitles_to_video(
         print_error(f"Subtitle file not found: {subtitle_path}")
         return False
 
-    # Build ffmpeg filter for subtitles using shlex.quote for safe escaping
+    # Build ffmpeg filter for subtitles using proper filter escaping.
     # The subtitles filter requires colon and backslash escaping within the filter string
-    sub_path_quoted = shlex.quote(subtitle_path)
-    # ffmpeg filter syntax needs additional escaping beyond shell quoting
-    sub_path_escaped = subtitle_path.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+    sub_path_escaped = escape_ffmpeg_filter_path(subtitle_path)
 
-    filter_str = f"subtitles={sub_path_quoted}"
+    filter_str = f"subtitles={sub_path_escaped}"
 
     cmd = [
         "ffmpeg", "-y",
@@ -686,8 +721,6 @@ def transcribe_faster_whisper(
     """
     Install: pip install faster-whisper
     """
-    from faster_whisper import WhisperModel
-
     if device == "auto":
         try:
             import torch
@@ -695,7 +728,7 @@ def transcribe_faster_whisper(
         except ImportError:
             device = "cpu"
     compute_type = "float16" if device == "cuda" else compute_type
-    model = WhisperModel(model_size, device=device, compute_type=compute_type)
+    model = _load_faster_whisper_model(model_size, device, compute_type)
     segments, info = model.transcribe(
         audio_path,
         word_timestamps=True,
@@ -919,8 +952,6 @@ def transcribe_distil_whisper(
     Install: pip install faster-whisper
     Distil-Whisper checkpoints work natively with faster-whisper.
     """
-    from faster_whisper import WhisperModel
-
     if device == "auto":
         try:
             import torch
@@ -928,7 +959,7 @@ def transcribe_distil_whisper(
         except ImportError:
             device = "cpu"
     compute_type = "float16" if device == "cuda" else compute_type
-    model = WhisperModel(model_size, device=device, compute_type=compute_type)
+    model = _load_faster_whisper_model(model_size, device, compute_type)
     segments, info = model.transcribe(
         audio_path,
         word_timestamps=True,
@@ -964,18 +995,20 @@ def transcribe_moonshine(
 
     Moonshine now supports word-level timestamps natively.
     """
-    import moonshine
-
-    # Moonshine returns list of transcript strings
-    result = moonshine.transcribe(audio_path, model_name)
-
     # For word-level timestamps, use the HuggingFace Transformers API:
     from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
     import torch
     import soundfile as sf
 
-    processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-base")
-    model = AutoModelForSpeechSeq2Seq.from_pretrained("UsefulSensors/moonshine-base")
+    # Load (and cache) the processor + model — the old code loaded the model
+    # twice (once via moonshine.transcribe, once via AutoModel) on every call.
+    processor, model = _get_cached_model(
+        ("moonshine-hf", "UsefulSensors/moonshine-base"),
+        lambda: (
+            AutoProcessor.from_pretrained("UsefulSensors/moonshine-base"),
+            AutoModelForSpeechSeq2Seq.from_pretrained("UsefulSensors/moonshine-base"),
+        ),
+    )
 
     audio, sr = sf.read(audio_path)
     if sr != processor.feature_extractor.sampling_rate:
@@ -1228,7 +1261,7 @@ if __name__ == "__main__":
     file_size = os.path.getsize(AUDIO_FILE) / (1024 * 1024)  # MB
     if file_size > 10240:
         print_error("File too large (>10GB).")
-        return
+        sys.exit(1)
     if file_size > 2048:
         print_warning(f"Large file ({file_size/1024:.1f} GB) — processing may be slow or fail due to memory limits.")
     print_info(f"Input file: {Style.UNDERLINE}{AUDIO_FILE}{Style.RESET} ({file_size:.1f} MB)")
@@ -1255,7 +1288,15 @@ if __name__ == "__main__":
     print(f"\n{Style.BG_CYAN}{Style.BRIGHT_BLACK}{Style.BOLD} STARTING TRANSCRIPTION {Style.RESET}")
     start_time = time.time()
 
-    words = transcribe_faster_whisper(AUDIO_FILE, model_size="large-v3", device="cpu")
+    # Detect GPU availability (matches the banner) instead of forcing CPU
+    try:
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    except ImportError:
+        device = "cpu"
+    print_info(f"Using device: {device}")
+
+    words = transcribe_faster_whisper(AUDIO_FILE, model_size="large-v3", device=device)
 
     elapsed = time.time() - start_time
 

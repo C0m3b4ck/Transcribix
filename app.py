@@ -1,6 +1,9 @@
 import os
 import sys
 import time
+import atexit
+import shutil
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -176,6 +179,40 @@ POSITION_PRESETS = {
 }
 
 
+# ========================= PER-REQUEST OUTPUT DIRS =========================
+# Unique per-request output directories prevent concurrent requests from
+# clobbering each other's SRT/ASS/video files.
+
+_REQUEST_TMP_DIRS = {}  # dir_path -> creation time
+
+
+def _make_request_dir() -> str:
+    """Create a unique per-request output directory for subtitle/video files."""
+    _cleanup_request_dirs()
+    dir_path = tempfile.mkdtemp(prefix="transcribix_")
+    _REQUEST_TMP_DIRS[dir_path] = time.time()
+    return dir_path
+
+
+def _cleanup_request_dirs(max_age: float = 900) -> None:
+    """Remove old per-request dirs (their files were already served by Gradio)."""
+    now = time.time()
+    for dir_path, created in list(_REQUEST_TMP_DIRS.items()):
+        if now - created > max_age:
+            shutil.rmtree(dir_path, ignore_errors=True)
+            _REQUEST_TMP_DIRS.pop(dir_path, None)
+
+
+def _cleanup_all_request_dirs() -> None:
+    """Remove all per-request dirs at process exit."""
+    for dir_path in list(_REQUEST_TMP_DIRS):
+        shutil.rmtree(dir_path, ignore_errors=True)
+    _REQUEST_TMP_DIRS.clear()
+
+
+atexit.register(_cleanup_all_request_dirs)
+
+
 # ========================= GRADIO CALLBACKS =========================
 
 def get_device_info():
@@ -236,8 +273,7 @@ def burn_only_subtitles(
         font_name = _sanitize_font_name(font_name)
         words_per_chunk = max(1, min(8, int(words_per_chunk)))
 
-        tmp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
-        os.makedirs(tmp_dir, exist_ok=True)
+        tmp_dir = _make_request_dir()
 
         prefs = {
             "font": font_name,
@@ -284,8 +320,7 @@ def regenerate_subtitles(
         font_name = _sanitize_font_name(font_name)
         words_per_chunk = max(1, min(8, int(words_per_chunk)))
 
-        tmp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
-        os.makedirs(tmp_dir, exist_ok=True)
+        tmp_dir = _make_request_dir()
 
         srt_path = os.path.join(tmp_dir, "subtitles.srt")
         words_to_srt(words, srt_path, words_per_chunk, gap_threshold)
@@ -496,9 +531,8 @@ def on_transcribe(
             add_periods=add_periods,
         )
 
-        # Create output directory
-        tmp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
-        os.makedirs(tmp_dir, exist_ok=True)
+        # Create output directory (unique per request)
+        tmp_dir = _make_request_dir()
 
         # Generate SRT
         srt_path = os.path.join(tmp_dir, "subtitles.srt")
@@ -571,9 +605,8 @@ def on_burn_subtitles(
     # Sanitize font name
     font_name = _sanitize_font_name(font_name)
 
-    # Create output path
-    tmp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
-    os.makedirs(tmp_dir, exist_ok=True)
+    # Create output path (unique per request)
+    tmp_dir = _make_request_dir()
     output_path = os.path.join(tmp_dir, "output_with_subtitles.mp4")
 
     # Build preferences
